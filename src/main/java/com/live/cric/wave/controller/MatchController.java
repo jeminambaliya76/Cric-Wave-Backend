@@ -126,6 +126,10 @@ public class MatchController {
         return cricketLiveScoreScrap.getLiveScore(matchId, matchName);
     }
 
+    @GetMapping("/cricket-scores/{matchId}/{matchName}")
+    public String getLiveScore2(@PathVariable String matchId, @PathVariable String matchName) throws IOException {
+        return cricketLiveScoreScrap.getLiveScore(matchId, matchName);
+    }
     // ====================== Player Profiles ======================
     @GetMapping("/profiles/{playerId}/{playerName}")
     public String getPlayerDetails(@PathVariable String playerId, @PathVariable String playerName) throws IOException {

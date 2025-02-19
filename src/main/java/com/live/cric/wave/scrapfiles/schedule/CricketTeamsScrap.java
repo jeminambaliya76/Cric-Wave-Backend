@@ -186,7 +186,7 @@ import java.util.*;
                 Element matchTitleElement = match.selectFirst(".cb-col-60 a.text-hvr-underline");
                 if (matchTitleElement != null) {
                     matchDetails.put("title", matchTitleElement.text());
-                    matchDetails.put("matchLink", baseUrl + matchTitleElement.attr("href"));
+                    matchDetails.put("matchLink",  matchTitleElement.attr("href"));
                 }
 
                 // Extract series name
@@ -335,7 +335,7 @@ System.out.println("jemin ====== "+newsElements);
                 Element titleElement = match.selectFirst(".cb-srs-mtchs-tm a span");
                 matchDetails.put("title", titleElement != null ? titleElement.text() : "N/A");
                 String matchLinkElement = match.selectFirst(".cb-srs-mtchs-tm a").attr("href");
-                matchDetails.put("match_link", baseUrl+matchLinkElement != null ? baseUrl+matchLinkElement : "N/A");
+                matchDetails.put("match_link", matchLinkElement != null ? matchLinkElement : "N/A");
 
                 // Get series title
                 Element seriesElement = match.selectFirst(".cb-srs-mtchs-tm .text-gray");

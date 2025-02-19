@@ -9,10 +9,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 @Service
 public class CricketLiveScoreScrap {
@@ -20,67 +17,58 @@ public class CricketLiveScoreScrap {
     @Value("${base.url}")
     private String baseUrl;
     @Value("${scrape.base.url}")
-    private String scrapebaseurl;
-
-    public String getLiveMatches() throws IOException {
+    private String scrapebaseurl;public String getLiveMatches() throws IOException {
         List<Map<String, Object>> liveMatches = new ArrayList<>();
 
-        // URL of the live match scores
-        String url = scrapebaseurl+"/cricket-match/live-scores";
-
-        // Fetch the HTML content from the URL
+        String url = scrapebaseurl + "/cricket-match/live-scores";
         Document doc = Jsoup.connect(url).get();
 
-        // Select the elements containing the live scores
-        Elements liveScoreElements = doc.select("div.cb-col.cb-col-100.cb-plyr-tbody.cb-rank-hdr.cb-lv-main");
+        // Select each match section
+        Elements matchSections = doc.select("div.cb-col.cb-col-100.cb-plyr-tbody");
 
-        // Iterate through each live score element and extract the data
-        for (Element liveScoreElement : liveScoreElements) {
-            // Extract the match title
-            String matchTitle = liveScoreElement.select("h2.cb-lv-grn-strip.text-bold.cb-lv-scr-mtch-hdr a").text();
+        for (Element section : matchSections) {
+            // Extract the tournament title
+            String matchTitle = section.select("h2.cb-lv-grn-strip a").text();
 
-            // Extract the match details
-            Elements matchDetails = liveScoreElement.select("div.cb-mtch-lst.cb-col.cb-col-100.cb-tms-itm");
-            for (Element matchDetail : matchDetails) {
+            // Iterate through each match in the section
+            Elements matches = section.select("div.cb-mtch-lst.cb-tms-itm");
+            for (Element match : matches) {
                 Map<String, Object> matchInfo = new HashMap<>();
 
-                // Extract team names
-                String teams = matchDetail.select("h3.cb-lv-scr-mtch-hdr a").text();
+                // Extract teams and match URL from the header
+                Element headerLink = match.selectFirst("h3.cb-lv-scr-mtch-hdr a");
+                String teams = headerLink.text();
+                String matchUrl = baseUrl + headerLink.attr("href");
 
-                // Extract the URL from the <a> tag
-                String matchUrl = matchDetail.select("h3.cb-lv-scr-mtch-hdr a").attr("href");
-                matchUrl =  baseUrl+ matchUrl; // Construct the full URL
+                // Extract team scores
+                Element scoreWell = match.selectFirst("a.cb-lv-scrs-well");
+                String team1Score = scoreWell.select("div.cb-hmscg-bwl-txt").text(); // TN
+                String team2Score = scoreWell.select("div.cb-hmscg-bat-txt").text(); // VID
 
-                // Extract match status
-                String status = matchDetail.select("div.cb-text-live").text();
+                // Extract status
+                String status = match.select("div.cb-text-live").text();
 
-                // Extract team 1 name and score
-                String team1Element = matchDetail.select("div.cb-hmscg-bwl-txt").text();
-//                String team1Name = team1Element.select("div.cb-hmscg-tm-nm").text();
-//                String team1Score = team1Element.select("div.cb-ovr-flo").get(0).text();
+                // Extract date, time, and venue
+                String venue = match.select("div.text-gray").text(); // Extract date (e.g., Feb 7)
 
-                // Extract team 2 name and score
-                String team2Element = matchDetail.select("div.cb-hmscg-bat-txt").text();
-//                String team2Name = team2Element.select("div.cb-hmscg-tm-nm").text();
-//                String team2Score = team2Element.select("div.cb-ovr-flo").get(0).text();
-
-                // Add data to the matchInfo map
+//                // Populate match info
                 matchInfo.put("matchTitle", matchTitle);
-                matchInfo.put("teams", teams);
-                matchInfo.put("matchUrl", matchUrl); // Add the match URL
+                matchInfo.put("teams", teams.replace(",",""));
+                matchInfo.put("matchUrl", matchUrl);
                 matchInfo.put("status", status);
-                matchInfo.put("team1", team1Element); // Team 1 name and score
-                matchInfo.put("team2",  team2Element); // Team 2 name and score
-
-                // Add match details to the list
+                matchInfo.put("team1", team1Score);
+                matchInfo.put("team2", team2Score);
+                matchInfo.put("venue", venue);  // Add extracted date
+//
                 liveMatches.add(matchInfo);
             }
         }
 
-        // Convert the list to JSON using Jackson
+        // Convert to JSON
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsString(liveMatches);
     }
+
     private Map<String, String> parseScore(String score) {
         Map<String, String> teamScores = new HashMap<>();
 
@@ -112,117 +100,173 @@ public class CricketLiveScoreScrap {
         return teamScores;
     }
     public String getLiveScore(String matchId, String matchName) throws IOException {
-        // List to store score details
         List<Map<String, Object>> liveScores = new ArrayList<>();
-
-        // URL of the live match score (replace with actual URL)
-        String url = "https://m.cricbuzz.com/live-cricket-scores/"+matchId+"/"+matchName;
-
-        // Fetch the HTML content from the URL
+        String url = "https://m.cricbuzz.com/live-cricket-scores/" + matchId + "/" + matchName;
         Document doc = Jsoup.connect(url).get();
         Map<String, Object> matchDetails = new HashMap<>();
 
-        // Extract Team 1 details
-        Element team1Element = doc.selectFirst("div.flex.flex-row.font-light.text-base .mr-2");
-        String team1 = team1Element != null ? team1Element.text() : "N/A";
-        matchDetails.put("team1", team1);
 
+
+
+        Element team1Element = doc.selectFirst("div.flex.flex-row.font-light.text-base .mr-2");
+
+        if (team1Element != null) {
+            matchDetails.put("team1", team1Element.text());
+        } else {
+            Element alternativeElement = doc.select("div.flex.flex-row").select("div.mr-2").last(); // New selector
+            if (alternativeElement != null) {
+                matchDetails.put("team1", alternativeElement.text());
+            } else {
+                matchDetails.put("team1", "N/A");
+            }
+        }
         Element team1ScoreElement = doc.selectFirst("div.flex.flex-row.font-light.text-base .flex");
-        String team1Score = team1ScoreElement != null ? team1ScoreElement.text() : "N/A";
-        matchDetails.put("team1Score", team1Score);
+
+        if (team1ScoreElement != null) {
+            matchDetails.put("team1Score", team1ScoreElement.text());
+        } else {
+            Element alternativeElement = doc.select("div.flex.flex-row").select("div").last(); // New selector
+
+            if (alternativeElement != null) {
+                matchDetails.put("team1Score", alternativeElement.text());
+            } else {
+                matchDetails.put("team1Score", "N/A");
+            }
+        }
 
         // Extract Team 2 details
         Element team2Element = doc.selectFirst("div.flex.flex-row.font-bold.text-xl .mr-2");
-        String team2 = team2Element != null ? team2Element.text() : "N/A";
-        matchDetails.put("team2", team2);
 
-        Elements team2Score = doc.select("div.flex.flex-row.font-bold.text-xl.flex");
-        String team2Scores = team2Score != null ? team2Score.text() : "N/A";
-        matchDetails.put("team2Score", team2Scores);
+        if (team2Element != null) {
+            matchDetails.put("team2", team2Element.text());
+        } else {
+            Element alternativeElement = doc.selectFirst("div.flex.flex-row.text-cbTxtSec div.mr-2"); // New selector
+            if (alternativeElement != null) {
+                matchDetails.put("team2", alternativeElement.text());
+            } else {
+                matchDetails.put("team2", "N/A");
+            }
+        }   // Extract Team 2 details
+        Element team2ScoreElement = doc.selectFirst("div.flex.flex-row.font-bold.text-xl.flex");
 
-        // Extract Current Run Rate (CRR)
-        Element crrElement = doc.selectFirst("div.text-cbTxtSec span:contains(CRR) + span");
-        String crr = crrElement != null ? crrElement.text() : "N/A";
-        matchDetails.put("crr", crr);
+        if (team2ScoreElement != null) {
+            matchDetails.put("team2Score", team2ScoreElement.text());
+        } else {
+            Element alternativeElement = doc.selectFirst("div.flex.flex-row.text-cbTxtSec > div:nth-child(2)"); // New selector
+            if (alternativeElement != null) {
+                matchDetails.put("team2Score", alternativeElement.text());
+            } else {
+                matchDetails.put("team2Score", "N/A");
+            }
+        }
 
-        // Extract Partnership
-        Element pshipElement = doc.select("div.text-cbTxtSec").select("div.mb-3")
-                .select("span.font-bold:contains(Partnership)").first();
-        String pship = pshipElement != null ? pshipElement.parent().ownText() : "N/A";
-        matchDetails.put("pship", pship);
 
-        // Extract Last 10 overs
-        Element last10Element = doc.select("div.text-cbTxtSec").select("div.mb-3")
-                .select("span.font-bold:contains(Last 10 overs)").first();
-        String last10 = last10Element != null ? last10Element.parent().ownText() : "N/A";
-        matchDetails.put("last10", last10);
+        // Extract Player of the Match
+        Element playerOfTheMatchElement = doc.selectFirst("div.text-xs:contains(PLAYER OF THE MATCH) + div a");
+        if (playerOfTheMatchElement != null) {
+            Map<String, String> playerOfTheMatch = new HashMap<>();
+            playerOfTheMatch.put("playerName", playerOfTheMatchElement.text());
+            playerOfTheMatch.put("playerUrl", playerOfTheMatchElement.attr("href"));
+            playerOfTheMatch.put("imageUrl", playerOfTheMatchElement.select("img").attr("src"));
 
-        // Extract Toss details
-        Element tossElement = doc.select("div.text-cbTxtSec span.font-bold:contains(Toss)").first();
-        String toss = tossElement != null ? tossElement.parent().ownText().replace("Toss: ", "").trim() : "N/A";
-        matchDetails.put("toss", toss);
+            matchDetails.put("playerOfTheMatch", playerOfTheMatch);
+        } else {
+            matchDetails.put("playerOfTheMatch", "N/A");
+        }
 
-        // Extract Live Update
-        Element liveUpdateElement = doc.selectFirst("div.text-cbTxtLive");
-        String liveUpdate = liveUpdateElement != null ? liveUpdateElement.text() : "N/A";
-        matchDetails.put("liveUpdate", liveUpdate);
+        // Extract Player of the Series
+        Element playerOfTheSeriesElement = doc.selectFirst("div.text-xs:contains(PLAYER OF THE SERIES) + div a");
+        if (playerOfTheSeriesElement != null) {
+            Map<String, String> playerOfTheSeries = new HashMap<>();
+            playerOfTheSeries.put("playerName", playerOfTheSeriesElement.text());
+            playerOfTheSeries.put("playerUrl", playerOfTheSeriesElement.attr("href"));
+            playerOfTheSeries.put("imageUrl", playerOfTheSeriesElement.select("img").attr("src"));
 
+            matchDetails.put("playerOfTheSeries", playerOfTheSeries);
+        } else {
+            matchDetails.put("playerOfTheSeries", "N/A");
+        }
+
+
+        // Extract Series, Venue, Date & Time
+        Element seriesElement = doc.selectFirst("div.text-xs .font-bold:contains(Series:) + a");
+        String series = seriesElement != null ? seriesElement.text() : "N/A";
+        matchDetails.put("series", series);
+
+        Element venueElement = doc.selectFirst("div.text-xs .font-bold:contains(Venue:) + a");
+        String venue = venueElement != null ? venueElement.text() : "N/A";
+        matchDetails.put("venue", venue);
+
+        Element dateTimeElement = doc.selectFirst("div.text-xs .font-bold:contains(Date & Time:)");
+        String dateTime = dateTimeElement != null ? dateTimeElement.parent().text().replace("Date & Time: ", "").trim() : "N/A";
+        matchDetails.put("dateTime", dateTime);
+
+
+        // Extract other details safely
+        matchDetails.put("crr", Optional.ofNullable(doc.selectFirst("div.text-cbTxtSec span:contains(CRR) + span"))
+                .map(Element::text).orElse("N/A"));
+        matchDetails.put("pship", Optional.ofNullable(doc.select("div.text-cbTxtSec div.mb-3 span.font-bold:contains(Partnership)").first())
+                .map(e -> e.parent().ownText()).orElse("N/A"));
+        matchDetails.put("last10", Optional.ofNullable(doc.select("div.text-cbTxtSec div.mb-3 span.font-bold:contains(Last 10 overs)").first())
+                .map(e -> e.parent().ownText()).orElse("N/A"));
+        matchDetails.put("toss", Optional.ofNullable(doc.select("div.text-cbTxtSec span.font-bold:contains(Toss)").first())
+                .map(e -> e.parent().ownText().replace("Toss: ", "").trim()).orElse("N/A"));
+        matchDetails.put("liveUpdate", Optional.ofNullable(doc.selectFirst("div.text-cbTxtLive"))
+                .map(Element::text).orElse("N/A"));
+        Element liveUpdatesElement = doc.selectFirst("div.text-cbTxtLive");
+
+        if (liveUpdatesElement != null) {
+            matchDetails.put("liveUpdate", liveUpdatesElement.text());
+        } else {
+            Element alternativeElement = doc.selectFirst("div.text-cbTextLink"); // New selector
+            if (alternativeElement != null) {
+                matchDetails.put("liveUpdate", alternativeElement.text());
+            } else {
+                matchDetails.put("liveUpdate", "N/A");
+            }
+        }
         // Extract Batter Details
-        Elements batters = doc.select("div.text-sm.mb-2").select(".grid.scorecard-bat-grid");
-
         List<Map<String, String>> batterDetailsList = new ArrayList<>();
-        for (int i = 1; i < batters.size(); i++) {
-            Map<String, String> batterDetails = new HashMap<>();
-
-            String playerName = batters.get(i).select(".flex").get(0).text();
-            String playerUrl = batters.get(i).select(".flex").get(0).select("a").attr("href");
-            String runs = batters.get(i).select(".flex").get(1).text();
-            String balls = batters.get(i).select(".flex").get(2).text();
-            String fours = batters.get(i).select(".flex").get(3).text();
-            String sixes = batters.get(i).select(".flex").get(4).text();
-            String strikeRate = batters.get(i).select(".flex").get(5).text();
-
-            batterDetails.put("playerName", playerName);
-            batterDetails.put("playerUrl", playerUrl);
-            batterDetails.put("R", runs);
-            batterDetails.put("B", balls);
-            batterDetails.put("fours", fours);
-            batterDetails.put("sixs", sixes);
-            batterDetails.put("SR", strikeRate);
-
-            batterDetailsList.add(batterDetails);
+        Elements batters = doc.select("div.text-sm.mb-2 .grid.scorecard-bat-grid");
+        for (Element batter : batters) {
+            Elements details = batter.select(".flex");
+            if (details.size() >= 6) {
+                Map<String, String> batterDetails = new HashMap<>();
+                batterDetails.put("playerName", details.get(0).text());
+                batterDetails.put("playerUrl", details.get(0).select("a").attr("href"));
+                batterDetails.put("R", details.get(1).text());
+                batterDetails.put("B", details.get(2).text());
+                batterDetails.put("fours", details.get(3).text());
+                batterDetails.put("sixs", details.get(4).text());
+                batterDetails.put("SR", details.get(5).text());
+                batterDetailsList.add(batterDetails);
+            }
         }
         matchDetails.put("batterDetails", batterDetailsList);
 
         // Extract Bowler Details
-        Elements bowlers = doc.select(".grid.scorecard-bat-grid");
         Map<String, String> bowlerDetails = new HashMap<>();
-        int size = batters.size() + 1;
-        String bowlerName = bowlers.get(size).select(".flex").get(0).text();
-        String bowlerUrl =bowlers.get(size).select(".flex").get(0).select("a").attr("href");
-        String overs = bowlers.get(size).select(".flex").get(1).text();
-        String maidens = bowlers.get(size).select(".flex").get(2).text();
-        String bowlerRuns = bowlers.get(size).select(".flex").get(3).text();
-        String wickets = bowlers.get(size).select(".flex").get(4).text();
-        String economy = bowlers.get(size).select(".flex").get(5).text();
-        bowlerDetails.put("playerName", bowlerName);
-        bowlerDetails.put("playerUrl",bowlerUrl);
-        bowlerDetails.put("O", overs);
-        bowlerDetails.put("M", maidens);
-        bowlerDetails.put("R", bowlerRuns);
-        bowlerDetails.put("W", wickets);
-        bowlerDetails.put("ECO", economy);
-
+        Elements bowlers = doc.select(".grid.scorecard-bat-grid");
+        if (!bowlers.isEmpty()) {
+            Elements details = bowlers.get(Math.min(batters.size(), bowlers.size() - 1)).select(".flex");
+            if (details.size() >= 6) {
+                bowlerDetails.put("playerName", details.get(0).text());
+                bowlerDetails.put("playerUrl", details.get(0).select("a").attr("href"));
+                bowlerDetails.put("O", details.get(1).text());
+                bowlerDetails.put("M", details.get(2).text());
+                bowlerDetails.put("R", details.get(3).text());
+                bowlerDetails.put("W", details.get(4).text());
+                bowlerDetails.put("ECO", details.get(5).text());
+            }
+        }
         matchDetails.put("bowlerDetails", bowlerDetails);
 
         // Extract Commentary
-        Elements commentaryDivs = doc.select("div.mb-2 div.flex.gap-4.wb\\:gap-6.mx-4.wb\\:mx-4.py-2.border-t.border-dotted.border-cbChineseSilver.wb\\:border-0");
-
         List<Map<String, String>> commentaryList = new ArrayList<>();
+        Elements commentaryDivs = doc.select("div.mb-2 div.flex.gap-4");
         for (Element commentary : commentaryDivs) {
             String overNumber = commentary.select("div.font-bold.text-center").text();
             String commentaryText = commentary.select("div:not(.font-bold)").text();
-
             if (!overNumber.isEmpty() && !commentaryText.isEmpty()) {
                 Map<String, String> commentaryDetails = new HashMap<>();
                 commentaryDetails.put("over", overNumber);
@@ -232,11 +276,9 @@ public class CricketLiveScoreScrap {
         }
         matchDetails.put("commentary", commentaryList);
 
-        // Add match details to the list
         liveScores.add(matchDetails);
-
-        // Convert the list to JSON
         ObjectMapper objectMapper = new ObjectMapper();
         return objectMapper.writeValueAsString(liveScores);
     }
+
 }
